@@ -25,6 +25,13 @@ World of Warcraft\_classic_era_\Interface\AddOns\OsoPartyBuffs\OsoPartyBuffs.toc
 
 For other Classic flavors use `_classic_` instead of `_classic_era_`.
 
+When working from this repo, `deploy.ps1` copies the addon files there for you. Pass `-AddOnsPath` if
+your WoW install is somewhere else:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy.ps1 -AddOnsPath "C:\...\_classic_era_\Interface\AddOns"
+```
+
 If the addon shows as "out of date", either tick **Load out of date AddOns** on the character-select AddOns screen, or
 update `## Interface:` in `OsoPartyBuffs.toc` to the number printed by:
 
