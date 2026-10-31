@@ -1,18 +1,27 @@
+--[[
+    Oso Party Buffs - Core.lua
+
+    Scans the buffs on you and your party members, filters them through the
+    allow/deny lists, and draws them as icons next to the party frames. Also
+    owns the saved settings, game events, and the /opb slash commands.
+    The options panel lives in Options.lua.
+]]
+
 local ADDON_NAME, ns = ...
 
 ns.DEFAULTS = {
     enabled = true,
-    showOnPlayer = false,   -- also show on your own frame (handy for testing solo)
-    tooltips = true,
-    highlightMine = true,   -- green border on buffs you cast
+    showOnPlayer = false,       -- also show on your own frame (handy for testing solo)
+    tooltips = true,            -- show the buff tooltip when hovering an icon
+    highlightMine = true,       -- green border on buffs you cast
     showTimers = true,
-    hideBlizzardPopup = false, -- hide the buff pop-up Blizzard shows when hovering a party frame
-    filterMode = "all",     -- "all" = everything except deny list, "allow" = only allow list
+    hideBlizzardPopup = false,  -- hide the buff pop-up Blizzard shows when hovering a party frame
+    filterMode = "all",         -- "all" = everything except deny list, "allow" = only allow list
     iconSize = 20,
     perRow = 8,
     maxIcons = 16,
     spacing = 2,
-    anchor = "RIGHT",       -- "RIGHT" or "BELOW" the unit frame
+    anchor = "RIGHT",           -- "RIGHT" or "BELOW" the unit frame
     offsetX = 0,
     offsetY = -4,
     allow = {},
@@ -20,20 +29,30 @@ ns.DEFAULTS = {
 }
 
 local UNITS = { "player", "party1", "party2", "party3", "party4" }
+local LISTS = { "allow", "deny" }
 local MAX_SCAN = 40
+local TIMER_INTERVAL = 0.2
 
 local db
-local containers = {}
-local allowRank, denySet = {}, {}
-local compactUnits = {} -- [compactFrame] = unit, filled by hooking CompactUnitFrame_SetUnit
+local containers = {}               -- [unit] = icon container frame
+local trackedUnits = {}             -- [unit] = true for every unit in UNITS
+local allowRank, denySet = {}, {}   -- keyed by lowercase buff name or numeric spell ID
+local compactUnits = {}             -- [raid-style frame] = unit, filled by hooking CompactUnitFrame_SetUnit
+local lowerNames = {}               -- [buff name] = lowercase name, so each name is lowercased once
+local layoutVersion = 0             -- bumped by RefreshAll; containers re-layout icons when it changes
 
-local floor, ceil, max, format = math.floor, math.ceil, math.max, string.format
+for _, unit in ipairs(UNITS) do
+    trackedUnits[unit] = true
+end
+
+local floor, ceil, min, max, format = math.floor, math.ceil, math.min, math.max, string.format
+local GetTime, UnitExists = GetTime, UnitExists
 
 local function Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff7fd4ffOso Party Buffs|r: " .. msg)
 end
-ns.Print = Print
 
+-- Fills in any missing keys in dst from src, leaving existing values alone
 local function CopyDefaults(src, dst)
     for k, v in pairs(src) do
         if dst[k] == nil then
@@ -47,39 +66,52 @@ local function CopyDefaults(src, dst)
     return dst
 end
 
--- Returns name, icon, count, duration, expirationTime, sourceUnit, spellId
-local function GetBuff(unit, index)
-    if C_UnitAuras and C_UnitAuras.GetBuffDataByIndex then
-        local a = C_UnitAuras.GetBuffDataByIndex(unit, index)
-        if not a then return end
-        return a.name, a.icon, a.applications, a.duration, a.expirationTime, a.sourceUnit, a.spellId
+-- GetBuff(unit, index) returns name, icon, count, duration, expirationTime, sourceUnit, spellId.
+-- UnitBuff is preferred because it returns plain values; C_UnitAuras builds a new table on every call.
+local GetBuff
+if UnitBuff then
+    GetBuff = function(unit, index)
+        local name, icon, count, _, duration, expirationTime, source, _, _, spellId = UnitBuff(unit, index)
+        return name, icon, count, duration, expirationTime, source, spellId
     end
-    local name, icon, count, _, duration, expirationTime, source, _, _, spellId = UnitBuff(unit, index)
-    return name, icon, count, duration, expirationTime, source, spellId
+else
+    GetBuff = function(unit, index)
+        local aura = C_UnitAuras.GetBuffDataByIndex(unit, index)
+        if not aura then return end
+        return aura.name, aura.icon, aura.applications, aura.duration, aura.expirationTime, aura.sourceUnit, aura.spellId
+    end
 end
 
 ---------------------------------------------------------------------------
--- Filters
+-- Allow / deny lists
 ---------------------------------------------------------------------------
 
+-- List entries match by lowercase name, or by spell ID when the entry is a number
+local function FilterKey(entry)
+    entry = strlower(strtrim(entry))
+    return tonumber(entry) or entry
+end
+
+-- Rebuilds the lookup tables from the saved lists; call after any list change
 function ns.RebuildFilters()
     wipe(allowRank)
     wipe(denySet)
     for i, entry in ipairs(db.allow) do
-        local key = strlower(strtrim(entry))
+        local key = FilterKey(entry)
         if not allowRank[key] then allowRank[key] = i end
     end
     for _, entry in ipairs(db.deny) do
-        denySet[strlower(strtrim(entry))] = true
+        denySet[FilterKey(entry)] = true
     end
 end
 
+-- Adds text to the "allow" or "deny" list; returns false if empty or already listed
 function ns.AddEntry(listKey, text)
     text = text and strtrim(text) or ""
     if text == "" then return false end
     local lower = strlower(text)
-    for _, v in ipairs(db[listKey]) do
-        if strlower(v) == lower then return false end
+    for _, entry in ipairs(db[listKey]) do
+        if strlower(entry) == lower then return false end
     end
     tinsert(db[listKey], text)
     ns.RebuildFilters()
@@ -87,16 +119,18 @@ function ns.AddEntry(listKey, text)
     return true
 end
 
+-- Removes the entry at index from the "allow" or "deny" list
 function ns.RemoveEntry(listKey, index)
     tremove(db[listKey], index)
     ns.RebuildFilters()
     ns.RefreshAll()
 end
 
+-- Removes text from both lists; returns true if anything was removed
 function ns.RemoveByName(text)
     local lower = strlower(strtrim(text or ""))
     local removed = false
-    for _, listKey in ipairs({ "allow", "deny" }) do
+    for _, listKey in ipairs(LISTS) do
         local list = db[listKey]
         for i = #list, 1, -1 do
             if strlower(list[i]) == lower then
@@ -114,13 +148,13 @@ end
 -- Icons
 ---------------------------------------------------------------------------
 
-local function FormatTime(t)
-    if t >= 3600 then
-        return format("%dh", ceil(t / 3600))
-    elseif t >= 60 then
-        return format("%dm", ceil(t / 60))
+local function FormatTime(seconds)
+    if seconds >= 3600 then
+        return format("%dh", ceil(seconds / 3600))
+    elseif seconds >= 60 then
+        return format("%dm", ceil(seconds / 60))
     end
-    return format("%d", ceil(t))
+    return format("%d", seconds)
 end
 
 local function Icon_OnEnter(self)
@@ -134,68 +168,84 @@ local function Icon_OnLeave()
 end
 
 local function CreateIcon(container)
-    local b = CreateFrame("Frame", nil, container)
+    local icon = CreateFrame("Frame", nil, container)
 
-    b.border = b:CreateTexture(nil, "BACKGROUND")
-    b.border:SetPoint("TOPLEFT", -1, 1)
-    b.border:SetPoint("BOTTOMRIGHT", 1, -1)
+    icon.border = icon:CreateTexture(nil, "BACKGROUND")
+    icon.border:SetPoint("TOPLEFT", -1, 1)
+    icon.border:SetPoint("BOTTOMRIGHT", 1, -1)
 
-    b.icon = b:CreateTexture(nil, "ARTWORK")
-    b.icon:SetAllPoints()
-    b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    icon.texture = icon:CreateTexture(nil, "ARTWORK")
+    icon.texture:SetAllPoints()
+    icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    b.cd = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
-    b.cd:SetAllPoints()
-    b.cd:SetReverse(true)
-    b.cd:SetDrawEdge(false)
-    if b.cd.SetHideCountdownNumbers then b.cd:SetHideCountdownNumbers(true) end
+    icon.cooldown = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
+    icon.cooldown:SetAllPoints()
+    icon.cooldown:SetReverse(true)
+    icon.cooldown:SetDrawEdge(false)
+    if icon.cooldown.SetHideCountdownNumbers then icon.cooldown:SetHideCountdownNumbers(true) end
 
     -- Text sits above the cooldown swipe
-    local overlay = CreateFrame("Frame", nil, b)
+    local overlay = CreateFrame("Frame", nil, icon)
     overlay:SetAllPoints()
-    overlay:SetFrameLevel(b.cd:GetFrameLevel() + 1)
+    overlay:SetFrameLevel(icon.cooldown:GetFrameLevel() + 1)
 
-    b.count = overlay:CreateFontString(nil, "OVERLAY")
-    b.count:SetPoint("TOPRIGHT", 2, 1)
-    b.timer = overlay:CreateFontString(nil, "OVERLAY")
-    b.timer:SetPoint("BOTTOM", 0, 1)
+    icon.count = overlay:CreateFontString(nil, "OVERLAY")
+    icon.count:SetPoint("TOPRIGHT", 2, 1)
+    icon.timer = overlay:CreateFontString(nil, "OVERLAY")
+    icon.timer:SetPoint("BOTTOM", 0, 1)
 
-    b:SetScript("OnEnter", Icon_OnEnter)
-    b:SetScript("OnLeave", Icon_OnLeave)
-    return b
+    icon:SetScript("OnEnter", Icon_OnEnter)
+    icon:SetScript("OnLeave", Icon_OnLeave)
+    return icon
 end
 
-local function Container_OnUpdate(self, elapsed)
-    self.elapsed = (self.elapsed or 0) + elapsed
-    if self.elapsed < 0.2 then return end
-    self.elapsed = 0
-    if not db.showTimers then return end
+-- Applies size, position and font settings; only runs when settings change or the icon is new
+local function LayoutIcon(container, i, icon)
+    local size, step = db.iconSize, db.iconSize + db.spacing
+    local fontSize = max(8, floor(size * 0.45))
+    icon:SetSize(size, size)
+    icon:ClearAllPoints()
+    icon:SetPoint("TOPLEFT", container, "TOPLEFT", ((i - 1) % db.perRow) * step, -floor((i - 1) / db.perRow) * step)
+    icon:EnableMouse(db.tooltips)
+    icon.count:SetFont(STANDARD_TEXT_FONT, fontSize, "OUTLINE")
+    icon.timer:SetFont(STANDARD_TEXT_FONT, fontSize, "OUTLINE")
+end
+
+-- Updates the time-remaining text, only touching a FontString when its whole-second value changes
+local function UpdateTimers(container)
     local now = GetTime()
-    for i = 1, self.numShown do
-        local b = self.icons[i]
-        if b.expiration and b.expiration > 0 then
-            local left = b.expiration - now
-            b.timer:SetText(left > 0 and FormatTime(left) or "")
-        else
-            b.timer:SetText("")
+    for i = 1, container.numShown do
+        local icon = container.icons[i]
+        local seconds = icon.expiration > 0 and ceil(icon.expiration - now) or 0
+        if seconds < 0 then seconds = 0 end
+        if icon.timerSeconds ~= seconds then
+            icon.timerSeconds = seconds
+            icon.timer:SetText(seconds > 0 and FormatTime(seconds) or "")
         end
     end
 end
 
+local function Container_OnUpdate(self, elapsed)
+    self.elapsed = self.elapsed + elapsed
+    if self.elapsed < TIMER_INTERVAL then return end
+    self.elapsed = 0
+    UpdateTimers(self)
+end
+
 local function GetContainer(unit)
-    local c = containers[unit]
-    if not c then
-        c = CreateFrame("Frame", nil, UIParent)
-        c.unit = unit
-        c.icons = {}
-        c.entries = {}
-        c.numShown = 0
-        c:SetSize(1, 1)
-        c:SetScript("OnUpdate", Container_OnUpdate)
-        c:Hide()
-        containers[unit] = c
+    local container = containers[unit]
+    if not container then
+        container = CreateFrame("Frame", nil, UIParent)
+        container.unit = unit
+        container.icons = {}
+        container.entries = {}
+        container.numShown = 0
+        container.elapsed = 0
+        container:SetSize(1, 1)
+        container:Hide()
+        containers[unit] = container
     end
-    return c
+    return container
 end
 
 ---------------------------------------------------------------------------
@@ -216,18 +266,18 @@ local function FindAnchor(unit)
     return _G["PartyMemberFrame" .. i] or (PartyFrame and PartyFrame["MemberFrame" .. i])
 end
 
-local function AnchorContainer(c)
-    local anchor = FindAnchor(c.unit)
-    c.anchor = anchor
+local function AnchorContainer(container)
+    local anchor = FindAnchor(container.unit)
+    container.anchor = anchor
     if not anchor then return end
-    c:SetParent(anchor)
-    c:SetFrameStrata(anchor:GetFrameStrata())
-    c:SetFrameLevel(anchor:GetFrameLevel() + 5)
-    c:ClearAllPoints()
+    container:SetParent(anchor)
+    container:SetFrameStrata(anchor:GetFrameStrata())
+    container:SetFrameLevel(anchor:GetFrameLevel() + 5)
+    container:ClearAllPoints()
     if db.anchor == "BELOW" then
-        c:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", db.offsetX, db.offsetY)
+        container:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", db.offsetX, db.offsetY)
     else
-        c:SetPoint("TOPLEFT", anchor, "TOPRIGHT", db.offsetX, db.offsetY)
+        container:SetPoint("TOPLEFT", anchor, "TOPRIGHT", db.offsetX, db.offsetY)
     end
 end
 
@@ -235,110 +285,121 @@ end
 -- Updating
 ---------------------------------------------------------------------------
 
+-- Fills entries with the unit's buffs that pass the filters, sorted for display; returns the count
 local function CollectBuffs(unit, entries)
     local n = 0
     local allowOnly = db.filterMode == "allow"
     for i = 1, MAX_SCAN do
-        local name, icon, count, duration, expiration, source, spellId = GetBuff(unit, i)
+        local name, texture, count, duration, expiration, source, spellId = GetBuff(unit, i)
         if not name then break end
-        local key = strlower(name)
-        local idKey = spellId and tostring(spellId)
-        local rank = allowRank[key] or (idKey and allowRank[idKey])
-        local denied = denySet[key] or (idKey and denySet[idKey])
+        local key = lowerNames[name]
+        if not key then
+            key = strlower(name)
+            lowerNames[name] = key
+        end
+        local rank = allowRank[key] or (spellId and allowRank[spellId])
+        local denied = denySet[key] or (spellId and denySet[spellId])
         if not denied and (rank or not allowOnly) then
             n = n + 1
-            local e = entries[n] or {}
-            entries[n] = e
-            e.index, e.icon, e.count = i, icon, count
-            e.duration, e.expiration = duration, expiration
-            e.mine = source == "player"
+            local entry = entries[n] or {}
+            entries[n] = entry
+            entry.index, entry.texture, entry.count = i, texture, count
+            entry.duration, entry.expiration = duration, expiration
+            entry.mine = source == "player"
             -- Allow-list buffs come first, in list order, so they always sit in the same spot
-            e.order = (rank or 1000) * 100 + i
+            entry.order = (rank or 1000) * 100 + i
         end
     end
 
     -- Insertion sort of the first n entries (n is small)
     for i = 2, n do
-        local e = entries[i]
+        local entry = entries[i]
         local j = i - 1
-        while j >= 1 and entries[j].order > e.order do
+        while j >= 1 and entries[j].order > entry.order do
             entries[j + 1] = entries[j]
             j = j - 1
         end
-        entries[j + 1] = e
+        entries[j + 1] = entry
     end
     return n
 end
 
 local function UpdateUnit(unit)
-    local c = containers[unit]
-    if not c then return end
+    local container = containers[unit]
+    if not container then return end
 
     if not db.enabled or (unit == "player" and not db.showOnPlayer)
-        or not c.anchor or not UnitExists(unit) then
-        c.numShown = 0
-        c:Hide()
+        or not container.anchor or not UnitExists(unit) then
+        container.numShown = 0
+        container:SetScript("OnUpdate", nil)
+        container:Hide()
         return
     end
 
-    local n = CollectBuffs(unit, c.entries)
-    local shown = math.min(n, db.maxIcons)
-    local size, gap, perRow = db.iconSize, db.spacing, db.perRow
-    local fontSize = max(8, floor(size * 0.45))
+    local icons = container.icons
+    if container.layoutVersion ~= layoutVersion then
+        container.layoutVersion = layoutVersion
+        for i, icon in ipairs(icons) do
+            LayoutIcon(container, i, icon)
+        end
+    end
+
+    local shown = min(CollectBuffs(unit, container.entries), db.maxIcons)
+    local hasTimer = false
 
     for i = 1, shown do
-        local e = c.entries[i]
-        local b = c.icons[i]
-        if not b then
-            b = CreateIcon(c)
-            c.icons[i] = b
+        local entry = container.entries[i]
+        local icon = icons[i]
+        if not icon then
+            icon = CreateIcon(container)
+            icons[i] = icon
+            LayoutIcon(container, i, icon)
         end
-        b.unit, b.index, b.expiration = unit, e.index, e.expiration
-        b:SetSize(size, size)
-        b:ClearAllPoints()
-        b:SetPoint("TOPLEFT", c, "TOPLEFT", ((i - 1) % perRow) * (size + gap), -floor((i - 1) / perRow) * (size + gap))
-        b:EnableMouse(db.tooltips)
+        icon.unit, icon.index = unit, entry.index
 
-        b.icon:SetTexture(e.icon)
-        if db.highlightMine and e.mine then
-            b.border:SetColorTexture(0.1, 1, 0.1, 1)
+        icon.texture:SetTexture(entry.texture)
+        if db.highlightMine and entry.mine then
+            icon.border:SetColorTexture(0.1, 1, 0.1, 1)
         else
-            b.border:SetColorTexture(0, 0, 0, 1)
+            icon.border:SetColorTexture(0, 0, 0, 1)
         end
 
-        if e.duration and e.duration > 0 and e.expiration and e.expiration > 0 then
-            b.cd:SetCooldown(e.expiration - e.duration, e.duration)
-            b.cd:Show()
+        local timed = entry.duration and entry.duration > 0 and entry.expiration and entry.expiration > 0
+        if timed then
+            icon.cooldown:SetCooldown(entry.expiration - entry.duration, entry.duration)
+            icon.cooldown:Show()
+            hasTimer = true
         else
-            b.cd:Hide()
+            icon.cooldown:Hide()
         end
+        icon.expiration = (timed and db.showTimers) and entry.expiration or 0
+        icon.timerSeconds = nil
 
-        b.count:SetFont(STANDARD_TEXT_FONT, fontSize, "OUTLINE")
-        b.count:SetText(e.count and e.count > 1 and e.count or "")
-        b.timer:SetFont(STANDARD_TEXT_FONT, fontSize, "OUTLINE")
-        b.timer:SetText("")
-        b:Show()
+        icon.count:SetText(entry.count and entry.count > 1 and entry.count or "")
+        icon:Show()
     end
-    for i = shown + 1, #c.icons do
-        c.icons[i]:Hide()
+    for i = shown + 1, #icons do
+        icons[i]:Hide()
     end
 
-    c.numShown = shown
-    c.elapsed = 1 -- refresh timer text on the next frame
-    local cols = math.min(shown, perRow)
-    local rows = ceil(shown / perRow)
-    c:SetSize(max(1, cols * (size + gap)), max(1, rows * (size + gap)))
-    c:SetShown(shown > 0)
+    container.numShown = shown
+    UpdateTimers(container)
+    -- Only tick while there is a countdown to show
+    container:SetScript("OnUpdate", (hasTimer and db.showTimers) and Container_OnUpdate or nil)
+    container:SetShown(shown > 0)
 end
 
+-- Re-anchors and redraws every unit; call after any settings change
 function ns.RefreshAll()
     if not db then return end
+    layoutVersion = layoutVersion + 1
     for _, unit in ipairs(UNITS) do
         AnchorContainer(GetContainer(unit))
         UpdateUnit(unit)
     end
 end
 
+-- Coalesces bursts of roster/frame events into a single RefreshAll
 local refreshPending = false
 local function ScheduleRefresh()
     if refreshPending then return end
@@ -362,13 +423,16 @@ events:RegisterEvent("UNIT_AURA")
 events:RegisterEvent("CVAR_UPDATE")
 
 events:SetScript("OnEvent", function(_, event, arg1)
-    if event == "ADDON_LOADED" then
+    if event == "UNIT_AURA" then
+        -- Most frequent event, so it is checked first
+        if containers[arg1] then UpdateUnit(arg1) end
+    elseif event == "ADDON_LOADED" then
         if arg1 ~= ADDON_NAME then return end
         OsoPartyBuffsDB = OsoPartyBuffsDB or {}
         db = CopyDefaults(ns.DEFAULTS, OsoPartyBuffsDB)
         ns.db = db
         ns.RebuildFilters()
-        ns.CreateOptions()
+        ns.RegisterOptions()
         events:UnregisterEvent("ADDON_LOADED")
     elseif event == "PLAYER_LOGIN" then
         if PartyMemberBuffTooltip then
@@ -377,18 +441,16 @@ events:SetScript("OnEvent", function(_, event, arg1)
             end)
         end
         if CompactUnitFrame_SetUnit then
+            -- Also called for every nameplate, so only refresh when a party/player frame changes
             hooksecurefunc("CompactUnitFrame_SetUnit", function(frame, unit)
-                if unit and (unit == "player" or unit:match("^party%d$")) then
+                if not trackedUnits[unit] then unit = nil end
+                if compactUnits[frame] ~= unit then
                     compactUnits[frame] = unit
-                else
-                    compactUnits[frame] = nil
+                    ScheduleRefresh()
                 end
-                ScheduleRefresh()
             end)
         end
         ns.RefreshAll()
-    elseif event == "UNIT_AURA" then
-        if containers[arg1] then UpdateUnit(arg1) end
     else
         ScheduleRefresh()
     end

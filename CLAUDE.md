@@ -3,7 +3,8 @@
 WoW Classic (Era) addon that shows party members' buffs, from any source, on their party frames.
 
 - `Core.lua`: buff scanning, allow/deny filtering, icon layout, events, `/opb` slash commands
-- `Options.lua`: settings panel (Settings canvas, falls back to the old Interface Options)
+- `Options.lua`: settings panel (Settings canvas, falls back to the old Interface Options). Its controls are
+  built on first open, not at load; keep it that way so the addon costs nothing at login
 - `OsoPartyBuffs.toc`: addon manifest. Any new `.lua`/`.xml` file must be listed here
 
 ## Saved settings
