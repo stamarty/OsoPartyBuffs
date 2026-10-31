@@ -15,7 +15,10 @@ New options only need a default in `ns.DEFAULTS`; changing what an existing sett
 
 ## Workflow
 
-After changing any addon file, deploy it to the game:
+**Never deploy, commit or push without the user's explicit permission for that specific change.**
+Make the edits, say what changed, and ask before each of these steps.
+
+To deploy to the game (only when the user says to):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy.ps1
@@ -25,4 +28,4 @@ This replaces `D:\ProgramFiles\World of Warcraft\_classic_era_\Interface\AddOns\
 of the `.toc` and the files it lists. Don't link the repo into AddOns; the game didn't load it through a link.
 After deploying, `/reload` in game, or restart WoW if the `.toc` changed or files were added.
 
-Commit to `main` and push to `origin` (github.com/stamarty/OsoPartyBuffs) when a change is done.
+Commits go to `main` and pushes to `origin` (github.com/stamarty/OsoPartyBuffs), each only when the user asks.

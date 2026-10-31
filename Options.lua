@@ -237,7 +237,7 @@ local function BuildPanel()
     -- Left column: general options, filter mode, position and layout
     CheckBox(panel, "Enabled", "enabled", LEFT_X, -60)
     CheckBox(panel, "Also show on my player frame", "showOnPlayer", LEFT_X, -84)
-    CheckBox(panel, "Show tooltips on hover", "tooltips", LEFT_X, -108)
+    CheckBox(panel, "Show tooltips on hover", "showTooltips", LEFT_X, -108)
     CheckBox(panel, "Green border on buffs I cast", "highlightMine", LEFT_X, -132)
     CheckBox(panel, "Show time remaining", "showTimers", LEFT_X, -156)
     CheckBox(panel, "Hide Blizzard's buff pop-up on party frames", "hideBlizzardPopup", LEFT_X, -180)
@@ -260,7 +260,7 @@ local function BuildPanel()
     Slider(panel, "X offset", "offsetX", -200, 200, 1, LEFT_X, -442, half)
     Slider(panel, "Y offset", "offsetY", -200, 200, 1, LEFT_X + half + 16, -442, half)
 
-    local tip = Label(panel, "Settings are saved per character. Scroll a slider for single steps.", "GameFontDisableSmall")
+    local tip = Label(panel, "Hover and scroll mouse wheel for single steps.", "GameFontDisableSmall")
     tip:SetPoint("TOPLEFT", LEFT_X, -486)
 
     -- Right column: allow and deny lists

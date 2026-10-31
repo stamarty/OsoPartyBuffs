@@ -12,7 +12,7 @@ local ADDON_NAME, ns = ...
 ns.DEFAULTS = {
     enabled = true,
     showOnPlayer = false,       -- also show on your own frame (handy for testing solo)
-    tooltips = true,            -- show the buff tooltip when hovering an icon
+    showTooltips = true,        -- show the buff tooltip when hovering an icon
     highlightMine = true,       -- green border on buffs you cast
     showTimers = true,
     hideBlizzardPopup = false,  -- hide the buff pop-up Blizzard shows when hovering a party frame
@@ -206,7 +206,7 @@ local function LayoutIcon(container, i, icon)
     icon:SetSize(size, size)
     icon:ClearAllPoints()
     icon:SetPoint("TOPLEFT", container, "TOPLEFT", ((i - 1) % db.perRow) * step, -floor((i - 1) / db.perRow) * step)
-    icon:EnableMouse(db.tooltips)
+    icon:EnableMouse(db.showTooltips)
     icon.count:SetFont(STANDARD_TEXT_FONT, fontSize, "OUTLINE")
     icon.timer:SetFont(STANDARD_TEXT_FONT, fontSize, "OUTLINE")
 end
