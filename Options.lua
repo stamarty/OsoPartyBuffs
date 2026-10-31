@@ -137,7 +137,19 @@ local function Slider(parent, text, key, minValue, maxValue, step, x, y, width)
     return Register(holder)
 end
 
--- Text box, Add button and scrolling list with remove buttons for the "allow" or "deny" list
+-- Small scroll-arrow button; direction is "Up" or "Down"
+local function ArrowButton(parent, direction)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(18, 18)
+    local path = "Interface\\Buttons\\UI-ScrollBar-Scroll" .. direction .. "Button-"
+    button:SetNormalTexture(path .. "Up")
+    button:SetPushedTexture(path .. "Down")
+    button:SetDisabledTexture(path .. "Disabled")
+    button:SetHighlightTexture(path .. "Highlight", "ADD")
+    return button
+end
+
+-- Text box, Add button and scrolling list with move/remove buttons for the "allow" or "deny" list
 local function ListEditor(parent, title, hint, listKey, x, y)
     local editor = CreateFrame("Frame", nil, parent)
     editor:SetPoint("TOPLEFT", x, y)
@@ -193,6 +205,16 @@ local function ListEditor(parent, title, hint, listKey, x, y)
         editor:Refresh()
     end
 
+    local function UpButton_OnClick(button)
+        ns.MoveEntry(listKey, button:GetParent().index, -1)
+        editor:Refresh()
+    end
+
+    local function DownButton_OnClick(button)
+        ns.MoveEntry(listKey, button:GetParent().index, 1)
+        editor:Refresh()
+    end
+
     editor.rows = {}
     function editor:Refresh()
         local list = ns.db[listKey]
@@ -204,15 +226,23 @@ local function ListEditor(parent, title, hint, listKey, x, y)
                 row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
                 row.label = Label(row, "", "GameFontHighlightSmall")
                 row.label:SetPoint("LEFT", 4, 0)
-                row.label:SetPoint("RIGHT", -22, 0)
+                row.label:SetPoint("RIGHT", -58, 0)
                 row.removeButton = CreateFrame("Button", nil, row, "UIPanelCloseButton")
                 row.removeButton:SetSize(20, 20)
                 row.removeButton:SetPoint("RIGHT", 2, 0)
                 row.removeButton:SetScript("OnClick", RemoveButton_OnClick)
+                row.downButton = ArrowButton(row, "Down")
+                row.downButton:SetPoint("RIGHT", row.removeButton, "LEFT", 0, 0)
+                row.downButton:SetScript("OnClick", DownButton_OnClick)
+                row.upButton = ArrowButton(row, "Up")
+                row.upButton:SetPoint("RIGHT", row.downButton, "LEFT", 0, 0)
+                row.upButton:SetScript("OnClick", UpButton_OnClick)
                 self.rows[i] = row
             end
             row.index = i
             row.label:SetText(entry)
+            row.upButton:SetEnabled(i > 1)
+            row.downButton:SetEnabled(i < #list)
             row:Show()
         end
         for i = #list + 1, #self.rows do
@@ -263,9 +293,19 @@ local function BuildPanel()
     local tip = Label(panel, "Hover and scroll mouse wheel for single steps.", "GameFontDisableSmall")
     tip:SetPoint("TOPLEFT", LEFT_X, -486)
 
+    local orderTitle = Label(panel, "Icon order", "GameFontNormalSmall")
+    orderTitle:SetPoint("TOPLEFT", LEFT_X, -508)
+    local orderText = Label(panel,
+        "Allow-list buffs always come first, in list order: the top entry is the first icon. "
+        .. "All other buffs follow in the order the game lists them, which is roughly the order "
+        .. "they were applied.",
+        "GameFontHighlightSmall")
+    orderText:SetPoint("TOPLEFT", orderTitle, "BOTTOMLEFT", 0, -2)
+    orderText:SetWidth(290)
+
     -- Right column: allow and deny lists
     ListEditor(panel, "Allow list",
-        "Always shown first, in this order. Buff name (all ranks) or spell ID.",
+        "Shown first, in this order. Use the arrows to reorder. Buff name (all ranks) or spell ID.",
         "allow", RIGHT_X, -60)
     ListEditor(panel, "Deny list",
         "Never shown. Buff name (all ranks) or spell ID.",

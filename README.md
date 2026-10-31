@@ -7,7 +7,9 @@ whether a party member already has a buff, such as Rejuvenation, from any caster
 
 - Buff icons on each party member's frame, from **any source**, with a cooldown swipe and time remaining.
 - **Allow list**: these buffs always show first, in list order, so a buff like Rejuvenation always sits in the same spot.
-  An optional mode shows *only* allow-list buffs.
+  An optional mode shows *only* allow-list buffs. Other buffs follow in the game's own order, roughly the order
+  they were applied.
+- Both lists can be reordered with the arrow buttons in the options.
 - **Deny list**: these buffs are never shown.
 - List entries match a buff **name**, which covers every rank, or a specific **spell ID**.
 - Adjustable icon size, icons per row, max icons, spacing, position (right of or below the frame) and X/Y offset.

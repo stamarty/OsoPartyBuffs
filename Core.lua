@@ -126,6 +126,16 @@ function ns.RemoveEntry(listKey, index)
     ns.RefreshAll()
 end
 
+-- Moves the entry at index up (delta -1) or down (delta 1) in the "allow" or "deny" list
+function ns.MoveEntry(listKey, index, delta)
+    local list = db[listKey]
+    local target = index + delta
+    if target < 1 or target > #list then return end
+    list[index], list[target] = list[target], list[index]
+    ns.RebuildFilters()
+    ns.RefreshAll()
+end
+
 -- Removes text from both lists; returns true if anything was removed
 function ns.RemoveByName(text)
     local lower = strlower(strtrim(text or ""))
