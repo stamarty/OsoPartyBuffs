@@ -51,7 +51,5 @@ Open the options with `/opb`, or from the game's Options > AddOns panel.
 | `/opb allow <name or ID>` | Add to the allow list |
 | `/opb deny <name or ID>` | Add to the deny list |
 | `/opb remove <name or ID>` | Remove from both lists |
-| `/opb size <10-48>` | Set icon size |
-| `/opb mode all\|allow` | Show all buffs, or only the allow list |
 | `/opb list` | Print both lists |
 | `/opb reset` | Restore defaults |

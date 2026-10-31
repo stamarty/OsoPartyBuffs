@@ -419,24 +419,6 @@ SlashCmdList.OSOPARTYBUFFS = function(msg)
         end
     elseif cmd == "remove" then
         Print(ns.RemoveByName(rest) and ("Removed '" .. rest .. "'.") or ("'" .. rest .. "' was not in either list."))
-    elseif cmd == "size" then
-        local n = tonumber(rest)
-        if n then
-            db.iconSize = math.min(48, math.max(10, floor(n)))
-            ns.RefreshAll()
-            Print("Icon size set to " .. db.iconSize .. ".")
-        else
-            Print("Usage: /opb size 10-48")
-        end
-    elseif cmd == "mode" then
-        rest = strlower(rest)
-        if rest == "all" or rest == "allow" then
-            db.filterMode = rest
-            ns.RefreshAll()
-            Print("Filter mode: " .. rest)
-        else
-            Print("Usage: /opb mode all | allow")
-        end
     elseif cmd == "list" then
         PrintList("allow")
         PrintList("deny")
@@ -452,8 +434,6 @@ SlashCmdList.OSOPARTYBUFFS = function(msg)
         Print("/opb allow <name or spell ID> - add to allow list")
         Print("/opb deny <name or spell ID> - add to deny list")
         Print("/opb remove <name or spell ID> - remove from both lists")
-        Print("/opb size <10-48> - icon size")
-        Print("/opb mode all|allow - show all buffs, or only the allow list")
         Print("/opb list - print both lists")
         Print("/opb reset - restore defaults")
     end

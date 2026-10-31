@@ -6,6 +6,12 @@ WoW Classic (Era) addon that shows party members' buffs, from any source, on the
 - `Options.lua`: settings panel (Settings canvas, falls back to the old Interface Options)
 - `OsoPartyBuffs.toc`: addon manifest. Any new `.lua`/`.xml` file must be listed here
 
+## Saved settings
+
+Settings are saved per character in `OsoPartyBuffsDB` (`## SavedVariablesPerCharacter` in the `.toc`).
+Never rename that variable, the addon folder or the `.toc`: players would lose their settings.
+New options only need a default in `ns.DEFAULTS`; changing what an existing setting means needs a migration.
+
 ## Workflow
 
 After changing any addon file, deploy it to the game:
