@@ -225,27 +225,28 @@ function ns.CreateOptions()
     CheckBox(panel, "Show tooltips on hover", "tooltips", LEFT_X, -108)
     CheckBox(panel, "Green border on buffs I cast", "highlightMine", LEFT_X, -132)
     CheckBox(panel, "Show time remaining", "showTimers", LEFT_X, -156)
+    CheckBox(panel, "Hide Blizzard's buff pop-up on party frames", "hideBlizzardPopup", LEFT_X, -180)
 
     RadioGroup(panel, "Which buffs to show", "filterMode", {
         { "all", "All buffs except the deny list" },
         { "allow", "Only buffs in the allow list" },
-    }, LEFT_X, -192)
+    }, LEFT_X, -216)
 
     RadioGroup(panel, "Position", "anchor", {
         { "RIGHT", "To the right of the frame" },
         { "BELOW", "Below the frame" },
-    }, LEFT_X, -258)
+    }, LEFT_X, -282)
 
     local half = 135
-    Slider(panel, "Icon size", "iconSize", 10, 48, 1, LEFT_X, -326, half)
-    Slider(panel, "Icons per row", "perRow", 1, 16, 1, LEFT_X + half + 16, -326, half)
-    Slider(panel, "Max icons", "maxIcons", 1, 32, 1, LEFT_X, -372, half)
-    Slider(panel, "Spacing", "spacing", 0, 10, 1, LEFT_X + half + 16, -372, half)
-    Slider(panel, "X offset", "offsetX", -200, 200, 1, LEFT_X, -418, half)
-    Slider(panel, "Y offset", "offsetY", -200, 200, 1, LEFT_X + half + 16, -418, half)
+    Slider(panel, "Icon size", "iconSize", 10, 48, 1, LEFT_X, -350, half)
+    Slider(panel, "Icons per row", "perRow", 1, 16, 1, LEFT_X + half + 16, -350, half)
+    Slider(panel, "Max icons", "maxIcons", 1, 32, 1, LEFT_X, -396, half)
+    Slider(panel, "Spacing", "spacing", 0, 10, 1, LEFT_X + half + 16, -396, half)
+    Slider(panel, "X offset", "offsetX", -200, 200, 1, LEFT_X, -442, half)
+    Slider(panel, "Y offset", "offsetY", -200, 200, 1, LEFT_X + half + 16, -442, half)
 
-    local tip = Label(panel, "Tip: scroll the mouse wheel over a slider for single steps.", "GameFontDisableSmall")
-    tip:SetPoint("TOPLEFT", LEFT_X, -462)
+    local tip = Label(panel, "Settings are saved per character. Scroll a slider for single steps.", "GameFontDisableSmall")
+    tip:SetPoint("TOPLEFT", LEFT_X, -486)
 
     -- Right column: lists
     ListEditor(panel, "Allow list",

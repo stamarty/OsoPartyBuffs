@@ -14,6 +14,8 @@ whether a party member already has a buff, such as Rejuvenation, from any caster
 - Optional green border on buffs *you* cast.
 - Works with the default party frames and with raid-style party frames.
 - Optional icons on your own player frame, handy for testing while solo.
+- Option to hide Blizzard's buff pop-up that appears when hovering a party frame.
+- All settings, including both lists, are saved **per character**.
 
 ## Install
 

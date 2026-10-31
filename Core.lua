@@ -6,6 +6,7 @@ ns.DEFAULTS = {
     tooltips = true,
     highlightMine = true,   -- green border on buffs you cast
     showTimers = true,
+    hideBlizzardPopup = false, -- hide the buff pop-up Blizzard shows when hovering a party frame
     filterMode = "all",     -- "all" = everything except deny list, "allow" = only allow list
     iconSize = 20,
     perRow = 8,
@@ -14,7 +15,7 @@ ns.DEFAULTS = {
     anchor = "RIGHT",       -- "RIGHT" or "BELOW" the unit frame
     offsetX = 0,
     offsetY = -4,
-    allow = { "Rejuvenation" },
+    allow = {},
     deny = {},
 }
 
@@ -370,6 +371,11 @@ events:SetScript("OnEvent", function(_, event, arg1)
         ns.CreateOptions()
         events:UnregisterEvent("ADDON_LOADED")
     elseif event == "PLAYER_LOGIN" then
+        if PartyMemberBuffTooltip then
+            PartyMemberBuffTooltip:HookScript("OnShow", function(self)
+                if db.hideBlizzardPopup then self:Hide() end
+            end)
+        end
         if CompactUnitFrame_SetUnit then
             hooksecurefunc("CompactUnitFrame_SetUnit", function(frame, unit)
                 if unit and (unit == "player" or unit:match("^party%d$")) then
