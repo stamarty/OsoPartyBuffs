@@ -1,7 +1,7 @@
 ## Interface: 11507
 ## Title: Oso Party Buffs
 ## Notes: Shows buffs (from any source) on your party frames, with allow/deny lists and adjustable icon size.
-## Author: smart001
+## Author: doomedcow
 ## Version: 1.0.0
 ## SavedVariablesPerCharacter: OsoPartyBuffsDB
 
