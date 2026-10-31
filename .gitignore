@@ -1,0 +1,9 @@
+# OS / editor clutter
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# Release packages
+*.zip
